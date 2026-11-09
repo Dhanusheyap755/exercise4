@@ -2,46 +2,41 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const initialTasks = [
-  {
-    id: 1,
-    title: "Document Testing",
-    description: "Check and verify all submitted documents.",
-    status: "Pending",
-  },
-  {
-    id: 2,
-    title: "Document Verification",
-    description: "Verify the documents and update their status.",
-    status: "Ongoing",
-  },
-  {
-    id: 3,
-    title: "Document Preparation",
-    description: "Prepare the final documents for submission.",
-    status: "Completed",
-  },
-];
+const API_URL = "https://exercise4-iieg.onrender.com/tasks";
 
 const columns = ["Pending", "Ongoing", "Completed"];
 
 function App() {
-  const [tasks, setTasks] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("my-tasks")) || initialTasks;
-    } catch {
-      return initialTasks;
-    }
-  });
-
+  const [tasks, setTasks] = useState([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(true);
 
+  // FETCH TASKS
   useEffect(() => {
-    localStorage.setItem("my-tasks", JSON.stringify(tasks));
-  }, [tasks]);
+    async function fetchTasks() {
+      try {
+        const response = await fetch(API_URL);
+        const data = await response.json();
 
-  function addTask(e) {
+        if (!response.ok) {
+          throw new Error("Failed to fetch tasks");
+        }
+
+        setTasks(data);
+      } catch (error) {
+        console.error("Error fetching tasks:", error);
+        alert("Unable to load tasks from server");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTasks();
+  }, []);
+
+  // ADD TASK
+  async function addTask(e) {
     e.preventDefault();
 
     if (!title.trim()) {
@@ -49,30 +44,84 @@ function App() {
       return;
     }
 
-    const newTask = {
-      id: Date.now(),
-      title: title.trim(),
-      description: description.trim(),
-      status: "Pending",
-    };
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+        }),
+      });
 
-    setTasks((previous) => [...previous, newTask]);
-    setTitle("");
-    setDescription("");
+      const savedTask = await response.json();
+
+      if (!response.ok) {
+        alert(savedTask.message || "Failed to add task");
+        return;
+      }
+
+      setTasks((previous) => [...previous, savedTask]);
+      setTitle("");
+      setDescription("");
+    } catch (error) {
+      console.error("Error adding task:", error);
+      alert("Server connection failed");
+    }
   }
 
-  function updateStatus(id, status) {
-    setTasks((previous) =>
-      previous.map((task) =>
-        task.id === id ? { ...task, status } : task
-      )
-    );
+  // UPDATE STATUS
+  async function updateStatus(id, status) {
+    try {
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      const updatedTask = await response.json();
+
+      if (!response.ok) {
+        alert(updatedTask.message || "Failed to update status");
+        return;
+      }
+
+      setTasks((previous) =>
+        previous.map((task) =>
+          task._id === id ? updatedTask : task
+        )
+      );
+    } catch (error) {
+      console.error("Error updating task:", error);
+      alert("Unable to update task");
+    }
   }
 
-  function deleteTask(id) {
-    setTasks((previous) =>
-      previous.filter((task) => task.id !== id)
-    );
+  // DELETE TASK
+  async function deleteTask(id) {
+    try {
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        alert(result.message || "Failed to delete task");
+        return;
+      }
+
+      setTasks((previous) =>
+        previous.filter((task) => task._id !== id)
+      );
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      alert("Unable to delete task");
+    }
   }
 
   return (
@@ -103,69 +152,73 @@ function App() {
         />
       </form>
 
-      <section className="task-board">
-        {columns.map((column) => {
-          const columnTasks = tasks.filter(
-            (task) => task.status === column
-          );
+      {loading ? (
+        <p>Loading tasks...</p>
+      ) : (
+        <section className="task-board">
+          {columns.map((column) => {
+            const columnTasks = tasks.filter(
+              (task) => task.status === column
+            );
 
-          return (
-            <div
-              className={`task-column ${column.toLowerCase()}`}
-              key={column}
-            >
-              <div className="column-heading">
-                <h2>{column}</h2>
-                <span className="task-count">
-                  {columnTasks.length}
-                </span>
+            return (
+              <div
+                className={`task-column ${column.toLowerCase()}`}
+                key={column}
+              >
+                <div className="column-heading">
+                  <h2>{column}</h2>
+                  <span className="task-count">
+                    {columnTasks.length}
+                  </span>
+                </div>
+
+                {columnTasks.length === 0 ? (
+                  <p className="empty-message">No tasks yet</p>
+                ) : (
+                  columnTasks.map((task) => (
+                    <article className="task-card" key={task._id}>
+                      <h3>{task.title}</h3>
+
+                      {task.description && (
+                        <p className="task-description">
+                          {task.description}
+                        </p>
+                      )}
+
+                      <label className="status-label">
+                        Update Status
+                      </label>
+
+                      <select
+                        value={task.status}
+                        onChange={(e) =>
+                          updateStatus(task._id, e.target.value)
+                        }
+                        aria-label={`Update status of ${task.title}`}
+                      >
+                        {columns.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        className="delete-button"
+                        onClick={() => deleteTask(task._id)}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                    </article>
+                  ))
+                )}
               </div>
-
-              {columnTasks.length === 0 ? (
-                <p className="empty-message">No tasks yet</p>
-              ) : (
-                columnTasks.map((task) => (
-                  <article className="task-card" key={task.id}>
-                    <h3>{task.title}</h3>
-
-                    {task.description && (
-                      <p className="task-description">
-                        {task.description}
-                      </p>
-                    )}
-
-                    <label className="status-label">
-                      Update Status
-                    </label>
-
-                    <select
-                      value={task.status}
-                      onChange={(e) =>
-                        updateStatus(task.id, e.target.value)
-                      }
-                      aria-label={`Update status of ${task.title}`}
-                    >
-                      {columns.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-
-                    <button
-                      className="delete-button"
-                      onClick={() => deleteTask(task.id)}
-                      type="button"
-                    >
-                      Delete
-                    </button>
-                  </article>
-                ))
-              )}
-            </div>
-          );
-        })}
-      </section>
+            );
+          })}
+        </section>
+      )}
     </main>
   );
 }
