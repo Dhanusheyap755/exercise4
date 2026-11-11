@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API_URL = "https://exercise4-iieg.onrender.com/tasks";
+const API_URL = "https://exercise4-1.onrender.com/tasks";
 
 const columns = ["Pending", "Ongoing", "Completed"];
 
